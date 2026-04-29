@@ -91,6 +91,11 @@ class SignalAnalyzer {
     };
   }
 
+  // Alias for backward compatibility with old controller
+  async generateMXNSignals(orderType) {
+    return this.generateSignals(orderType);
+  }
+
   clearCache() {
     this.cache.PUT  = { signals: [], fetchedAt: null };
     this.cache.CALL = { signals: [], fetchedAt: null };
