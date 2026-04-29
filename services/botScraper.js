@@ -4,12 +4,13 @@ class BotScraper {
   constructor() {
     this.browser = null;
     this.botUrl = process.env.BOT_URL || 'https://fer3oon-bot.railway.app';
+    this.timeOffset = parseInt(process.env.TIME_OFFSET || '6');
   }
 
   async initBrowser() {
     if (this.browser) return;
 
-    console.log('🚀 Launching browser...');
+    console.log('Launching browser...');
     
     this.browser = await puppeteer.launch({
       headless: 'new',
@@ -25,120 +26,96 @@ class BotScraper {
       ]
     });
 
-    console.log('✅ Browser launched successfully');
+    console.log('Browser launched successfully');
   }
 
-  /**
-   * Scrape signals from the bot
-   * @param {string} orderType - 'PUT' or 'CALL'
-   * @returns {Array} List of signals
-   */
   async scrapeSignals(orderType = 'PUT') {
     try {
       await this.initBrowser();
 
-      console.log(`📡 Scraping ${orderType} signals from bot...`);
+      console.log(`Scraping ${orderType} signals...`);
 
       const page = await this.browser.newPage();
       
       await page.setViewport({ width: 1280, height: 800 });
 
-      console.log(`🌐 Navigating to ${this.botUrl}...`);
       await page.goto(this.botUrl, {
         waitUntil: 'networkidle2',
         timeout: 60000
       });
 
-      console.log('📝 Filling form with correct selectors...');
-
-      // ✅ الـ selectors الصحيحة من البوت الأصلي
-      
-      // 1. Pair: GOLD_OTC_QTX
       await page.select('#cbAtivo', 'GOLD_OTC_QTX');
       await this.sleep(500);
 
-      // 2. Min Percentage: 100%
       await page.select('#selPercentageMin', '100');
       await this.sleep(500);
 
-      // 3. Max Percentage: 100%
       await page.select('#selPercentageMax', '100');
       await this.sleep(500);
 
-      // 4. Timeframe: M1
       await page.select('#selCandleTime', 'M1');
       await this.sleep(500);
 
-      // 5. Days: 20
       await page.select('#selDays', '20');
       await this.sleep(500);
 
-      // 6. Order Type: PUT or CALL
       await page.select('#selOrderType', orderType);
       await this.sleep(500);
 
-      console.log(`✅ Form filled: GOLD_OTC_QTX, 100%, M1, 20 days, ${orderType}`);
-
-      // ✅ Click the button - البوت بيستخدم onclick="getHistoric()"
-      console.log('🔘 Clicking PROCESS DATA button...');
       await page.evaluate(() => {
-        getHistoric(); // استدعي الـ function مباشرة
+        getHistoric();
       });
 
-      // ✅ انتظر حتى البوت يخلص تحليل
-      console.log('⏳ Waiting for analysis to complete (may take 30-60 seconds)...');
-      
-      // ✅ استخرج البيانات من JavaScript variable مباشرة
       await page.waitForFunction(
         () => typeof listBestPairTimes !== 'undefined' && listBestPairTimes.length > 0,
         { timeout: 90000 }
       );
 
-      console.log('✅ Analysis complete! Extracting signals...');
-
-      // ✅ استخرج الإشارات من الـ JavaScript variable
-      const signals = await page.evaluate((type) => {
-        // listBestPairTimes موجودة في الـ page scope
+      const signals = await page.evaluate((type, offset) => {
         return listBestPairTimes.map(signal => {
           const timeParts = signal.time.split(':');
+
+          let hour = parseInt(timeParts[0]);
+          const minute = parseInt(timeParts[1]);
+          const second = parseInt(timeParts[2] || 0);
+
+          // Apply timezone offset safely
+          hour = (hour + offset) % 24;
+          if (hour < 0) hour += 24;
+
           return {
             pair: 'GOLD',
-            hour: parseInt(timeParts[0]),
-            minute: parseInt(timeParts[1]),
-            second: parseInt(timeParts[2] || 0),
-            time: signal.time,
+            hour: hour,
+            minute: minute,
+            second: second,
+            time: `${hour.toString().padStart(2, '0')}:${minute
+              .toString()
+              .padStart(2, '0')}:${second
+              .toString()
+              .padStart(2, '0')}`,
             type: type,
             winrate: signal.winrate || 100
           };
         });
-      }, orderType);
-
-      console.log(`✅ Extracted ${signals.length} ${orderType} signals`);
+      }, orderType, this.timeOffset);
 
       await page.close();
 
       return signals;
 
     } catch (error) {
-      console.error('❌ Error scraping signals:', error);
+      console.error('Error scraping signals:', error);
       throw error;
     }
   }
 
-  /**
-   * Get both PUT and CALL signals
-   */
   async getAllSignals() {
     try {
-      console.log('📊 Getting all signals (PUT and CALL)...');
-
       const putSignals = await this.scrapeSignals('PUT');
-      console.log(`✅ Got ${putSignals.length} PUT signals`);
 
       await this.sleep(2000);
 
       const callSignals = await this.scrapeSignals('CALL');
-      console.log(`✅ Got ${callSignals.length} CALL signals`);
 
       return {
         PUT: putSignals,
@@ -147,17 +124,15 @@ class BotScraper {
       };
 
     } catch (error) {
-      console.error('❌ Error getting all signals:', error);
+      console.error('Error getting signals:', error);
       throw error;
     }
   }
 
   async closeBrowser() {
     if (this.browser) {
-      console.log('🔒 Closing browser...');
       await this.browser.close();
       this.browser = null;
-      console.log('✅ Browser closed');
     }
   }
 
