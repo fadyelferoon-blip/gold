@@ -1,55 +1,82 @@
-const oandaService = require('./oandaService');
+const botScraper = require('./botScraper');
 
 class SignalAnalyzer {
+  constructor() {
+    this.cache = {
+      PUT: { signals: [], fetchedAt: null },
+      CALL: { signals: [], fetchedAt: null }
+    };
 
-  async generateSignals() {
+    this.isRefreshing = false;
+    this.CACHE_DURATION = 3 * 60 * 60 * 1000; // 3 hours
+  }
+
+  isCacheValid(type) {
+    const c = this.cache[type];
+    return c.fetchedAt && c.signals.length > 0 &&
+      (Date.now() - c.fetchedAt) < this.CACHE_DURATION;
+  }
+
+  isCacheReady() {
+    return this.isCacheValid('PUT') && this.isCacheValid('CALL');
+  }
+
+  async generateSignals(type) {
+    if (this.isCacheValid(type)) {
+      console.log(`✅ Using cached ${type}`);
+      return this.cache[type].signals;
+    }
+
+    console.log(`🔄 Fetching ${type} signals...`);
+
     try {
-      const candles = await oandaService.getCandles('XAU_USD', 'M1', 500);
+      const signals = await botScraper.scrapeSignals(type);
 
-      if (!candles || candles.length === 0) return [];
+      this.cache[type] = {
+        signals: signals.map(s => ({
+          ...s,
+          pairDisplay: 'GOLD'
+        })),
+        fetchedAt: Date.now()
+      };
 
-      const signals = [];
-
-      for (let i = 1; i < candles.length; i++) {
-        const prev = candles[i - 1];
-        const curr = candles[i];
-
-        let type = null;
-
-        // 🔥 Basic baseline logic (placeholder for real bot strategy)
-        if (curr.close > curr.open && curr.close > prev.close) {
-          type = 'CALL';
-        }
-
-        if (curr.close < curr.open && curr.close < prev.close) {
-          type = 'PUT';
-        }
-
-        if (!type) continue;
-
-        const time = new Date(curr.time);
-
-        signals.push({
-          pair: 'GOLD',
-          type,
-          time: time.toISOString().slice(11, 19),
-          rawTime: curr.time,
-          winrate: 100
-        });
-      }
-
-      return signals;
+      return this.cache[type].signals;
 
     } catch (err) {
-      console.error('Signal Analyzer Error:', err.message);
+      console.error(`❌ Error ${type}:`, err.message);
       return [];
     }
   }
 
-  async getAllMergedSignals() {
-    return this.generateSignals();
+  async refreshAll() {
+    if (this.isRefreshing) return;
+
+    this.isRefreshing = true;
+
+    await this.generateSignals('PUT');
+    await new Promise(r => setTimeout(r, 1000));
+    await this.generateSignals('CALL');
+
+    this.isRefreshing = false;
   }
 
+  startBackgroundRefresh() {
+    setTimeout(() => this.refreshAll(), 5000);
+    setInterval(() => this.refreshAll(), this.CACHE_DURATION);
+  }
+
+  // 🔥 NEW: single clean merge function
+  getAllMergedSignals() {
+    return [
+      ...this.cache.PUT.signals,
+      ...this.cache.CALL.signals
+    ];
+  }
+
+  clearCache() {
+    this.cache.PUT = { signals: [], fetchedAt: null };
+    this.cache.CALL = { signals: [], fetchedAt: null };
+  }
 }
 
 module.exports = new SignalAnalyzer();
