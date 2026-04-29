@@ -4,14 +4,14 @@ class BotScraper {
   constructor() {
     this.browser = null;
     this.botUrl = process.env.BOT_URL || 'https://fer3oon-bot.railway.app';
-    this.timeOffset = parseInt(process.env.TIME_OFFSET || '6');
+    this.timeOffset = parseInt(process.env.TIME_OFFSET || '6'); // محفوظ لكن غير مستخدم في التحويل
   }
 
   async initBrowser() {
     if (this.browser) return;
 
     console.log('Launching browser...');
-    
+
     this.browser = await puppeteer.launch({
       headless: 'new',
       args: [
@@ -36,7 +36,6 @@ class BotScraper {
       console.log(`Scraping ${orderType} signals...`);
 
       const page = await this.browser.newPage();
-      
       await page.setViewport({ width: 1280, height: 800 });
 
       await page.goto(this.botUrl, {
@@ -71,33 +70,30 @@ class BotScraper {
         { timeout: 90000 }
       );
 
-      const signals = await page.evaluate((type, offset) => {
+      // 🚨 IMPORTANT: NO TIME CONVERSION HERE
+      const signals = await page.evaluate((type) => {
         return listBestPairTimes.map(signal => {
           const timeParts = signal.time.split(':');
 
-          let hour = parseInt(timeParts[0]);
+          const hour = parseInt(timeParts[0]);
           const minute = parseInt(timeParts[1]);
           const second = parseInt(timeParts[2] || 0);
 
-          // Apply timezone offset safely
-          hour = (hour + offset) % 24;
-          if (hour < 0) hour += 24;
-
           return {
             pair: 'GOLD',
-            hour: hour,
-            minute: minute,
-            second: second,
+            hour,
+            minute,
+            second,
             time: `${hour.toString().padStart(2, '0')}:${minute
               .toString()
               .padStart(2, '0')}:${second
               .toString()
               .padStart(2, '0')}`,
-            type: type,
+            type,
             winrate: signal.winrate || 100
           };
         });
-      }, orderType, this.timeOffset);
+      }, orderType);
 
       await page.close();
 
@@ -112,9 +108,7 @@ class BotScraper {
   async getAllSignals() {
     try {
       const putSignals = await this.scrapeSignals('PUT');
-
       await this.sleep(2000);
-
       const callSignals = await this.scrapeSignals('CALL');
 
       return {
