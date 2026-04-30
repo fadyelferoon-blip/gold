@@ -37,15 +37,8 @@ class SignalAnalyzer {
         fetchedAt: Date.now()
       };
 
-      // ✅ Log all fetched signals
       const bot = timezoneConverter.getCurrentBotTime();
-      console.log(`\n📊 ===== ${type} SIGNALS (${signals.length} total) =====`);
-      console.log(`⏰ Bot time now (UTC+6): ${bot.hour}:${String(bot.minute).padStart(2,'0')}:${String(bot.second).padStart(2,'0')}`);
-      signals.forEach((s, i) => {
-        const converted = timezoneConverter.convertToUserTime(s.time, 2);
-        console.log(`  ${i+1}. Bot: ${s.time} → UTC+2: ${converted.localTime} | ${type}`);
-      });
-      console.log(`==========================================\n`);
+      console.log(`📊 GOLD ${type}: ${signals.length} signals | Bot time (UTC+6): ${String(bot.hour).padStart(2,'0')}:${String(bot.minute).padStart(2,'0')}:${String(bot.second).padStart(2,'0')}`);
 
       return this.cache[type].signals;
 
@@ -58,26 +51,27 @@ class SignalAnalyzer {
   async refreshAll() {
     if (this.isRefreshing) return;
     this.isRefreshing = true;
-    console.log('🔄 Starting refresh...');
+
     await this.generateSignals('PUT');
     await new Promise(r => setTimeout(r, 1000));
     await this.generateSignals('CALL');
-    this.isRefreshing = false;
 
-    // ✅ Log next upcoming signals after refresh
+    // Show next upcoming signal
     const all = this.getAllMergedSignals();
     const upcoming = timezoneConverter.findNextSignal(all, 2);
-    console.log(`\n🎯 ===== NEXT UPCOMING SIGNALS (UTC+2) =====`);
-    upcoming.slice(0, 10).forEach((s, i) => {
-      console.log(`  ${i+1}. ${s.type} @ ${s.localTime} — in ${s.minutesUntil}min`);
-    });
-    console.log(`==========================================\n`);
+    if (upcoming.length > 0) {
+      const next = upcoming[0];
+      console.log(`🎯 NEXT SIGNAL: ${next.type} @ ${next.localTime} (${next.minutesUntil}min)`);
+    } else {
+      console.log(`⚠️ No upcoming signals found`);
+    }
+
+    this.isRefreshing = false;
   }
 
   startBackgroundRefresh() {
     setTimeout(() => this.refreshAll(), 5000);
     setInterval(() => this.refreshAll(), this.CACHE_DURATION);
-    console.log('⏰ Refresh every 3h');
   }
 
   getAllMergedSignals() {
