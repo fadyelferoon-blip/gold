@@ -40,6 +40,17 @@ class SignalAnalyzer {
       const bot = timezoneConverter.getCurrentBotTime();
       console.log(`📊 GOLD ${type}: ${signals.length} signals | Bot time (UTC+6): ${String(bot.hour).padStart(2,'0')}:${String(bot.minute).padStart(2,'0')}:${String(bot.second).padStart(2,'0')}`);
 
+      // Debug: show how many are upcoming
+      const upcoming = signals.filter(s => {
+        const [h, m, sec] = s.time.split(':').map(Number);
+        const sigSecs = h * 3600 + m * 60 + sec;
+        return sigSecs > bot.totalSeconds;
+      });
+      console.log(`📅 ${type} upcoming (after now): ${upcoming.length}`);
+      if (upcoming.length > 0) {
+        console.log(`   First: ${upcoming[0].time} | Last: ${upcoming[upcoming.length-1].time}`);
+      }
+
       return this.cache[type].signals;
 
     } catch (err) {
@@ -58,12 +69,17 @@ class SignalAnalyzer {
 
     // Show next upcoming signal
     const all = this.getAllMergedSignals();
+    const bot = timezoneConverter.getCurrentBotTime();
+    console.log(`🔍 Total merged: ${all.length} | Bot now: ${String(bot.hour).padStart(2,'0')}:${String(bot.minute).padStart(2,'0')}`);
+
     const upcoming = timezoneConverter.findNextSignal(all, 2);
+    console.log(`🔍 After filter: ${upcoming.length} upcoming`);
+
     if (upcoming.length > 0) {
       const next = upcoming[0];
       console.log(`🎯 NEXT SIGNAL: ${next.type} @ ${next.localTime} (${next.minutesUntil}min)`);
     } else {
-      console.log(`⚠️ No upcoming signals found`);
+      console.log(`⚠️ No upcoming signals - all passed for today`);
     }
 
     this.isRefreshing = false;
